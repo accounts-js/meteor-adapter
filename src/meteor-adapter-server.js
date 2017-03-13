@@ -1,14 +1,16 @@
-const extendMethod = (method, AccountsServer) => async(accessToken, ...args) => {
-  let user;
+const extendMethod = (method, AccountsServer) => (accessToken, ...args) => {
+  let userPromise;
 
   if (accessToken === null) {
-    user = null;
+    userPromise = Promise.resolve(null);
   }
   else {
-    user = await AccountsServer.resumeSession(accessToken);
+    userPromise = AccountsServer.resumeSession(accessToken);
   }
 
-  return method.apply(Object.assign({}, this, { user: () => user, userId: () => user.id }), [...(args || [])]);
+  return userPromise.then(user => {
+    return method.apply(Object.assign({}, this, { user: () => user, userId: () => user.id }), [...(args || [])]);
+  });
 };
 
 const extendMethodWithFiber = (method, AccountsServer) => {
@@ -39,10 +41,10 @@ const extendMethodWithFiber = (method, AccountsServer) => {
 const wrapMeteorPublish = (Meteor, AccountsServer) => {
   const originalMeteorPublish = Meteor.publish;
 
-  Meteor.publish = (publicationName, func, ...args) => {
+  Meteor.publish = (publicationName, func) => {
     const newFunc = extendMethodWithFiber(func, AccountsServer);
 
-    return originalMeteorPublish.apply(Meteor, [publicationName, newFunc, ...(args || [])]);
+    return originalMeteorPublish.apply(Meteor, [publicationName, newFunc]);
   };
 };
 
@@ -65,7 +67,7 @@ const wrapMeteorMethods = (Meteor, AccountsServer) => {
   }
 };
 
-export const wrapMeteorServer = (Meteor, AccountsServer) => {
+export const wrapMeteorServer = (Meteor, Accounts, AccountsServer) => {
   wrapMeteorMethods(Meteor, AccountsServer);
   wrapMeteorPublish(Meteor, AccountsServer);
 };

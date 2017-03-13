@@ -1,6 +1,6 @@
 {
   "name": "@accounts/meteor-adapter",
-  "version": "0.0.2",
+  "version": "0.0.6-alpha.26",
   "description": "MeteorJS wrapper for using AccountsJS with the original Meteor Accounts package ",
   "main": "lib/index.js",
   "repository": "https://github.com/js-accounts/meteor-adapter.git",
@@ -20,5 +20,8 @@
     "babel-preset-stage-0": "^6.22.0",
     "webpack": "1.13.3",
     "webpack-node-externals": "1.5.4"
+  },
+  "dependencies": {
+    "babel-polyfill": "^6.23.0"
   }
 }

@@ -13,20 +13,19 @@ module.exports = {
   },
   modulesDirectories: [
     'src',
-    'node_modules',
   ],
+  devtool: 'source-map',
   module: {
     loaders: [
       {
         test: /\.js$/,
         loader: 'babel',
-        exclude: /node_modules/,
         query: {
           babelrc: false,
           presets: ['es2015', 'stage-0'],
           plugins: [
             'transform-runtime',
-          ],
+          ]
         }
       },
     ],

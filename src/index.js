@@ -1,2 +1,2 @@
-export * from './meteor-adapter-client';
-export * from './meteor-adapter-server';
+export { wrapMeteorClient } from './meteor-adapter-client';
+export { wrapMeteorServer } from './meteor-adapter-server';
