@@ -2,7 +2,9 @@ const wrapMeteorClientMethod = (Meteor, AccountsClient, meteorMethod) => {
   const originalCall = Meteor[meteorMethod];
 
   Meteor[meteorMethod] = (name, ...args) => {
-    const { accessToken } = AccountsClient.tokens();
+    const {
+      accessToken
+    } = AccountsClient.tokens();
 
     return originalCall.apply(Meteor, [name, accessToken || null, ...(args || [])]);
   }
@@ -13,13 +15,19 @@ const replaceMethod = (source, dest, callbackify, argumentsTransformation, retur
   returnValueTransformation = returnValueTransformation || (retVal => retVal);
 
   source.obj[source.method] = (...args) => {
-    const methodWithContext = dest.obj[dest.method].bind(dest.obj);
+    let methodWithContext;
+
+    if (typeof dest.method === 'string') {
+      methodWithContext = dest.obj[dest.method].bind(dest.obj);
+    } else {
+      methodWithContext = dest.method.bind(dest.obj, dest.obj);
+    }
+
     let baseRet, catchedErr;
 
     try {
       baseRet = methodWithContext(...(argumentsTransformation(args)));
-    }
-    catch (e) {
+    } catch (e) {
       catchedErr = e;
     }
 
@@ -37,53 +45,92 @@ const replaceMethod = (source, dest, callbackify, argumentsTransformation, retur
           .catch(e => {
             callback(e, null);
           });
-      }
-      else {
+      } else {
         if (catchedErr) {
           callback(catchedErr, null);
-        }
-        else {
+        } else {
           callback(null, baseRet);
         }
       }
-    }
-    else {
+    } else {
       if (catchedErr && !callbackify) {
         throw catchedErr;
+      } else {
+        return ret;
       }
     }
   };
 };
 
 export const wrapMeteorClient = (Meteor, Accounts, AccountsClient) => {
+  Meteor.clearInterval(Accounts._pollIntervalTimer);
   wrapMeteorClientMethod(Meteor, AccountsClient, 'call');
   wrapMeteorClientMethod(Meteor, AccountsClient, 'subscribe');
-  replaceMethod(
-    {
+  replaceMethod({
       obj: Meteor,
       method: 'loginWithPassword',
-    },
-    {
+    }, {
       obj: AccountsClient,
       method: 'loginWithPassword',
     },
     true
   );
-  replaceMethod(
-    {
+  replaceMethod({
       obj: Meteor,
-      method: 'logout',
-    },
-    {
+      method: 'user',
+    }, {
       obj: AccountsClient,
-      method: 'logout',
-    });
-  replaceMethod(
-    {
+      method: 'user',
+    },
+    false,
+    (args) => {
+      Accounts._loggingInDeps.depend();
+
+      return args;
+    },
+  );
+  replaceMethod({
+      obj: Meteor,
+      method: 'loggingIn',
+    }, {
+      obj: AccountsClient,
+      method: () => {
+        return Accounts.loggingIn() || AccountsClient.loggingIn();
+      },
+    },
+    false,
+    (args) => {
+      Accounts._loggingInDeps.depend();
+
+      return args;
+    }
+  );
+  replaceMethod({
+      obj: Meteor,
+      method: 'userId',
+    }, {
+      obj: AccountsClient,
+      method: 'user',
+    },
+    false,
+    (args) => {
+      Accounts._loggingInDeps.depend();
+
+      return args;
+    },
+    user => user ? user.id : null,
+  );
+  replaceMethod({
+    obj: Meteor,
+    method: 'logout',
+  }, {
+    obj: AccountsClient,
+    method: 'logout',
+  });
+  replaceMethod({
       obj: Accounts,
       method: '_storedLoginToken',
-    },
-    {
+    }, {
       obj: AccountsClient,
       method: 'tokens',
     },

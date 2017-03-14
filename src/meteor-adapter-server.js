@@ -1,4 +1,4 @@
-const extendMethod = (method, AccountsServer) => (accessToken, ...args) => {
+const extendMethod = (method, AccountsServer, Meteor, overrideMeteorUser) => function(accessToken, ...args) {
   let userPromise;
 
   if (accessToken === null) {
@@ -9,12 +9,19 @@ const extendMethod = (method, AccountsServer) => (accessToken, ...args) => {
   }
 
   return userPromise.then(user => {
-    return method.apply(Object.assign({}, this, { user: () => user, userId: () => user.id }), [...(args || [])]);
+    if (overrideMeteorUser) {
+      Object.assign(Meteor, {
+        user: () => user || null,
+        userId: () => user ? user.id : null,
+      });
+    }
+
+    return method.apply(this, [...(args || [])]);
   });
 };
 
 const extendMethodWithFiber = (method, AccountsServer) => {
-  return (accessToken, ...args) => {
+  return function(accessToken, ...args) {
     let user;
 
     if (accessToken === null) {
@@ -23,10 +30,10 @@ const extendMethodWithFiber = (method, AccountsServer) => {
     else {
       const method = Meteor.wrapAsync(function (accessToken, callback) {
         AccountsServer.resumeSession(accessToken)
-          .then((user) => {
+          .then(user => {
             callback(null, user);
           })
-          .catch((e) => {
+          .catch(e => {
             callback(e, null);
           })
       });
@@ -34,7 +41,10 @@ const extendMethodWithFiber = (method, AccountsServer) => {
       user = method(accessToken);
     }
 
-    return method.apply(Object.assign({}, this, { user: () => user, userId: () => user.id }), [...(args || [])]);
+    this.user = user | null;
+    this.userId = user ? user.id : null;
+
+    return method.apply(this, [...(args || [])]);
   };
 };
 
@@ -57,7 +67,7 @@ const wrapMeteorMethods = (Meteor, AccountsServer) => {
 
       return {
         name: methodName,
-        method: extendMethod(originalMethod, AccountsServer),
+        method: extendMethod(originalMethod, AccountsServer, Meteor, true),
       };
     });
 
