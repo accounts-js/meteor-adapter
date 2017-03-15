@@ -1,6 +1,6 @@
 {
   "name": "@accounts/meteor-adapter",
-  "version": "0.0.6-alpha.61",
+  "version": "0.0.7",
   "description": "MeteorJS wrapper for using AccountsJS with the original Meteor Accounts package ",
   "main": "lib/index.js",
   "repository": "https://github.com/js-accounts/meteor-adapter.git",

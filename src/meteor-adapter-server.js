@@ -1,26 +1,4 @@
-const extendMethod = (method, AccountsServer, Meteor, overrideMeteorUser) => function(accessToken, ...args) {
-  let userPromise;
-
-  if (accessToken === null) {
-    userPromise = Promise.resolve(null);
-  }
-  else {
-    userPromise = AccountsServer.resumeSession(accessToken);
-  }
-
-  return userPromise.then(user => {
-    if (overrideMeteorUser) {
-      Object.assign(Meteor, {
-        user: () => user || null,
-        userId: () => user ? user.id : null,
-      });
-    }
-
-    return method.apply(this, [...(args || [])]);
-  });
-};
-
-const extendMethodWithFiber = (method, AccountsServer) => {
+const extendMethodWithFiber = (method, AccountsServer, Meteor, overrideMeteorUser) => {
   return function(accessToken, ...args) {
     let user;
 
@@ -41,8 +19,14 @@ const extendMethodWithFiber = (method, AccountsServer) => {
       user = method(accessToken);
     }
 
-    this.user = user | null;
-    this.userId = user ? user.id : null;
+    if (overrideMeteorUser) {
+      Meteor.user = () => user || null;
+      Meteor.userId = () => user ? user.id : null;
+    }
+    else {
+      this.user = user | null;
+      this.userId = user ? user.id : null;
+    }
 
     return method.apply(this, [...(args || [])]);
   };
@@ -52,7 +36,7 @@ const wrapMeteorPublish = (Meteor, AccountsServer) => {
   const originalMeteorPublish = Meteor.publish;
 
   Meteor.publish = (publicationName, func) => {
-    const newFunc = extendMethodWithFiber(func, AccountsServer);
+    const newFunc = extendMethodWithFiber(func, AccountsServer, Meteor, false);
 
     return originalMeteorPublish.apply(Meteor, [publicationName, newFunc]);
   };
@@ -67,7 +51,7 @@ const wrapMeteorMethods = (Meteor, AccountsServer) => {
 
       return {
         name: methodName,
-        method: extendMethod(originalMethod, AccountsServer, Meteor, true),
+        method: extendMethodWithFiber(originalMethod, AccountsServer, Meteor, true),
       };
     });
 
@@ -80,4 +64,12 @@ const wrapMeteorMethods = (Meteor, AccountsServer) => {
 export const wrapMeteorServer = (Meteor, Accounts, AccountsServer) => {
   wrapMeteorMethods(Meteor, AccountsServer);
   wrapMeteorPublish(Meteor, AccountsServer);
+
+  Meteor.publish('jsaccounts.currentUser', function() {
+    if (!this.userId) {
+      return null;
+    }
+    
+    return Meteor.users.find({_id: this.userId});
+  })
 };

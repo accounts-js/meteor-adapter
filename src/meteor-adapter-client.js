@@ -1,10 +1,8 @@
-const wrapMeteorClientMethod = (Meteor, AccountsClient, meteorMethod) => {
+const wrapMeteorClientMethod = (Meteor, Accounts, AccountsClient, meteorMethod) => {
   const originalCall = Meteor[meteorMethod];
 
   Meteor[meteorMethod] = (name, ...args) => {
-    const {
-      accessToken
-    } = AccountsClient.tokens();
+    const { accessToken } = AccountsClient.tokens();
 
     return originalCall.apply(Meteor, [name, accessToken || null, ...(args || [])]);
   }
@@ -64,8 +62,7 @@ const replaceMethod = (source, dest, callbackify, argumentsTransformation, retur
 
 export const wrapMeteorClient = (Meteor, Accounts, AccountsClient) => {
   Meteor.clearInterval(Accounts._pollIntervalTimer);
-  wrapMeteorClientMethod(Meteor, AccountsClient, 'call');
-  wrapMeteorClientMethod(Meteor, AccountsClient, 'subscribe');
+
   replaceMethod({
       obj: Meteor,
       method: 'loginWithPassword',
@@ -73,52 +70,7 @@ export const wrapMeteorClient = (Meteor, Accounts, AccountsClient) => {
       obj: AccountsClient,
       method: 'loginWithPassword',
     },
-    true
-  );
-  replaceMethod({
-      obj: Meteor,
-      method: 'user',
-    }, {
-      obj: AccountsClient,
-      method: 'user',
-    },
-    false,
-    (args) => {
-      Accounts._loggingInDeps.depend();
-
-      return args;
-    },
-  );
-  replaceMethod({
-      obj: Meteor,
-      method: 'loggingIn',
-    }, {
-      obj: AccountsClient,
-      method: () => {
-        return Accounts.loggingIn() || AccountsClient.loggingIn();
-      },
-    },
-    false,
-    (args) => {
-      Accounts._loggingInDeps.depend();
-
-      return args;
-    }
-  );
-  replaceMethod({
-      obj: Meteor,
-      method: 'userId',
-    }, {
-      obj: AccountsClient,
-      method: 'user',
-    },
-    false,
-    (args) => {
-      Accounts._loggingInDeps.depend();
-
-      return args;
-    },
-    user => user ? user.id : null,
+    true,
   );
   replaceMethod({
     obj: Meteor,
@@ -137,4 +89,7 @@ export const wrapMeteorClient = (Meteor, Accounts, AccountsClient) => {
     false,
     null,
     (result) => result.accessToken || undefined);
+
+  wrapMeteorClientMethod(Meteor, Accounts, AccountsClient, 'call');
+  wrapMeteorClientMethod(Meteor, Accounts, AccountsClient, 'subscribe');
 };
