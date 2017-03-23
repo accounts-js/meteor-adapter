@@ -2,7 +2,9 @@ const wrapMeteorClientMethod = (Meteor, Accounts, AccountsClient, meteorMethod) 
   const originalCall = Meteor[meteorMethod];
 
   Meteor[meteorMethod] = (name, ...args) => {
-    const { accessToken } = AccountsClient.tokens();
+    const {
+      accessToken
+    } = AccountsClient.tokens();
 
     return originalCall.apply(Meteor, [name, accessToken || null, ...(args || [])]);
   }

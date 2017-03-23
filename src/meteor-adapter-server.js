@@ -1,13 +1,13 @@
-const extendMethodWithFiber = (method, AccountsServer, Meteor, overrideMeteorUser) => {
-  return function(accessToken, ...args) {
+const extendMethodWithFiber = (method, ServerValidator, Meteor, overrideMeteorUser) => {
+  return function (accessToken, ...args) {
+    let meteorContext = this;
     let user;
 
     if (accessToken === null) {
       user = null;
-    }
-    else {
+    } else {
       const method = Meteor.wrapAsync(function (accessToken, callback) {
-        AccountsServer.resumeSession(accessToken)
+        ServerValidator.validateToken(accessToken, meteorContext)
           .then(user => {
             callback(null, user);
           })
@@ -19,30 +19,37 @@ const extendMethodWithFiber = (method, AccountsServer, Meteor, overrideMeteorUse
       user = method(accessToken);
     }
 
+    const jsaccountsContext = {
+      userId: user ? user.id : null,
+      user: user || null,
+      accessToken,
+    };
+
     if (overrideMeteorUser) {
-      Meteor.user = () => user || null;
-      Meteor.userId = () => user ? user.id : null;
-    }
-    else {
-      this.user = user | null;
-      this.userId = user ? user.id : null;
+      Meteor.jsaccountsContext = jsaccountsContext;
+      Meteor.user = () => jsaccountsContext.user;
+      Meteor.userId = () => jsaccountsContext.userId;
+    } else {
+      this.jsaccountsContext = jsaccountsContext;      
+      this.user = jsaccountsContext.user;
+      this.userId = jsaccountsContext.userId;
     }
 
     return method.apply(this, [...(args || [])]);
   };
 };
 
-const wrapMeteorPublish = (Meteor, AccountsServer) => {
+const wrapMeteorPublish = (Meteor, ServerValidator) => {
   const originalMeteorPublish = Meteor.publish;
 
   Meteor.publish = (publicationName, func) => {
-    const newFunc = extendMethodWithFiber(func, AccountsServer, Meteor, false);
+    const newFunc = extendMethodWithFiber(func, ServerValidator, Meteor, false);
 
     return originalMeteorPublish.apply(Meteor, [publicationName, newFunc]);
   };
 };
 
-const wrapMeteorMethods = (Meteor, AccountsServer) => {
+const wrapMeteorMethods = (Meteor, ServerValidator) => {
   const originalMeteorMethod = Meteor.methods;
 
   Meteor.methods = (methodsObject, ...args) => {
@@ -51,25 +58,45 @@ const wrapMeteorMethods = (Meteor, AccountsServer) => {
 
       return {
         name: methodName,
-        method: extendMethodWithFiber(originalMethod, AccountsServer, Meteor, true),
+        method: extendMethodWithFiber(originalMethod, ServerValidator, Meteor, true),
       };
     });
 
-    const argsAsObject = modifiedArgs.reduce((a, b) => Object.assign(a, { [b.name]: b.method }), {});
+    const argsAsObject = modifiedArgs.reduce((a, b) => Object.assign(a, {
+      [b.name]: b.method
+    }), {});
 
     return originalMeteorMethod.apply(Meteor, [argsAsObject, ...(args || [])]);
   }
 };
 
-export const wrapMeteorServer = (Meteor, Accounts, AccountsServer) => {
-  wrapMeteorMethods(Meteor, AccountsServer);
-  wrapMeteorPublish(Meteor, AccountsServer);
+export const wrapMeteorServer = (Meteor, Accounts, ServerValidator) => {
+  wrapMeteorMethods(Meteor, ServerValidator);
+  wrapMeteorPublish(Meteor, ServerValidator);
 
-  Meteor.publish('jsaccounts.currentUser', function() {
-    if (!this.userId) {
-      return null;
-    }
-    
-    return Meteor.users.find({_id: this.userId});
-  })
+  Meteor.methods({
+    'jsaccounts/validateLogout': function() {
+      const connection = this.connection;
+
+      Meteor._noYieldsAllowed(function () {
+        Accounts._removeTokenFromConnection(connection.id);
+        Accounts._setAccountData(connection.id, 'loginToken', null);
+      });
+
+      this.setUserId(null);
+    },
+    'jsaccounts/validateLogin': function () {
+      const connection = this.connection;
+      const jsaccountsContext = Meteor.jsaccountsContext || {};
+      
+      Meteor._noYieldsAllowed(function () {
+        Accounts._removeTokenFromConnection(connection.id);
+        Accounts._setAccountData(connection.id, 'loginToken', jsaccountsContext.accessToken);
+      });
+
+      this.setUserId(jsaccountsContext.userId);
+
+      return true;      
+    },
+  });
 };
