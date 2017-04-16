@@ -62,6 +62,29 @@ const replaceMethod = (source, dest, callbackify, argumentsTransformation, retur
   };
 };
 
+const wrapMeteorClientMethods = Meteor => {
+  const originalMeteorMethod = Meteor.methods;
+
+  Meteor.methods = (methodsObject, ...args) => {
+    const modifiedArgs = Object.keys(methodsObject).map(methodName => {
+      const originalMethod = methodsObject[methodName];
+
+      return {
+        name: methodName,
+        method: function(accessToken, ...args) {
+          return originalMethod.apply(this, args);
+        },
+      };
+    });
+
+    const argsAsObject = modifiedArgs.reduce((a, b) => Object.assign(a, {
+      [b.name]: b.method
+    }), {});
+
+    return originalMeteorMethod.apply(Meteor, [argsAsObject, ...(args || [])]);
+  }
+};
+
 export const wrapMeteorClient = (Meteor, Accounts, AccountsClient) => {
   Meteor.clearInterval(Accounts._pollIntervalTimer);
 
@@ -94,4 +117,5 @@ export const wrapMeteorClient = (Meteor, Accounts, AccountsClient) => {
 
   wrapMeteorClientMethod(Meteor, Accounts, AccountsClient, 'call');
   wrapMeteorClientMethod(Meteor, Accounts, AccountsClient, 'subscribe');
+  wrapMeteorClientMethods(Meteor);
 };

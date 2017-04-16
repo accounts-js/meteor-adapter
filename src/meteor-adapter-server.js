@@ -1,4 +1,4 @@
-const extendMethodWithFiber = (method, ServerValidator, Meteor, overrideMeteorUser) => {
+const extendMethodWithFiber = (method, ServerValidator, Meteor, Accounts, overrideMeteorUser) => {
   return function (accessToken, ...args) {
     let meteorContext = this;
     let user;
@@ -30,7 +30,7 @@ const extendMethodWithFiber = (method, ServerValidator, Meteor, overrideMeteorUs
       Meteor.user = () => jsaccountsContext.user;
       Meteor.userId = () => jsaccountsContext.userId;
     } else {
-      this.jsaccountsContext = jsaccountsContext;      
+      this.jsaccountsContext = jsaccountsContext;
       this.user = jsaccountsContext.user;
       this.userId = jsaccountsContext.userId;
     }
@@ -39,17 +39,17 @@ const extendMethodWithFiber = (method, ServerValidator, Meteor, overrideMeteorUs
   };
 };
 
-const wrapMeteorPublish = (Meteor, ServerValidator) => {
+const wrapMeteorPublish = (Meteor, Accounts, ServerValidator) => {
   const originalMeteorPublish = Meteor.publish;
 
   Meteor.publish = (publicationName, func) => {
-    const newFunc = extendMethodWithFiber(func, ServerValidator, Meteor, false);
+    const newFunc = extendMethodWithFiber(func, ServerValidator, Meteor, Accounts, false);
 
     return originalMeteorPublish.apply(Meteor, [publicationName, newFunc]);
   };
 };
 
-const wrapMeteorMethods = (Meteor, ServerValidator) => {
+const wrapMeteorMethods = (Meteor, Accounts, ServerValidator) => {
   const originalMeteorMethod = Meteor.methods;
 
   Meteor.methods = (methodsObject, ...args) => {
@@ -58,7 +58,7 @@ const wrapMeteorMethods = (Meteor, ServerValidator) => {
 
       return {
         name: methodName,
-        method: extendMethodWithFiber(originalMethod, ServerValidator, Meteor, true),
+        method: extendMethodWithFiber(originalMethod, ServerValidator, Meteor, Accounts, true),
       };
     });
 
@@ -71,11 +71,11 @@ const wrapMeteorMethods = (Meteor, ServerValidator) => {
 };
 
 export const wrapMeteorServer = (Meteor, Accounts, ServerValidator) => {
-  wrapMeteorMethods(Meteor, ServerValidator);
-  wrapMeteorPublish(Meteor, ServerValidator);
+  wrapMeteorMethods(Meteor, Accounts, ServerValidator);
+  wrapMeteorPublish(Meteor, Accounts, ServerValidator);
 
   Meteor.methods({
-    'jsaccounts/validateLogout': function() {
+    'jsaccounts/validateLogout': function () {
       const connection = this.connection;
 
       Meteor._noYieldsAllowed(function () {
@@ -88,7 +88,7 @@ export const wrapMeteorServer = (Meteor, Accounts, ServerValidator) => {
     'jsaccounts/validateLogin': function () {
       const connection = this.connection;
       const jsaccountsContext = Meteor.jsaccountsContext || {};
-      
+
       Meteor._noYieldsAllowed(function () {
         Accounts._removeTokenFromConnection(connection.id);
         Accounts._setAccountData(connection.id, 'loginToken', jsaccountsContext.accessToken);
@@ -96,7 +96,7 @@ export const wrapMeteorServer = (Meteor, Accounts, ServerValidator) => {
 
       this.setUserId(jsaccountsContext.userId);
 
-      return true;      
+      return true;
     },
   });
 };
