@@ -1,79 +1,4 @@
-const extendMethodWithFiber = (method, ServerValidator, Meteor, Accounts, overrideMeteorUser) => {
-  return function (accessToken, ...args) {
-    let meteorContext = this;
-    let user;
-
-    if (accessToken === null) {
-      user = null;
-    } else {
-      const method = Meteor.wrapAsync(function (accessToken, callback) {
-        ServerValidator.validateToken(accessToken, meteorContext)
-          .then(user => {
-            callback(null, user);
-          })
-          .catch(e => {
-            callback(e, null);
-          })
-      });
-
-      user = method(accessToken);
-    }
-
-    const jsaccountsContext = {
-      userId: user ? user.id : null,
-      user: user || null,
-      accessToken,
-    };
-
-    if (overrideMeteorUser) {
-      Meteor.jsaccountsContext = jsaccountsContext;
-      Meteor.user = () => jsaccountsContext.user;
-      Meteor.userId = () => jsaccountsContext.userId;
-    } else {
-      this.jsaccountsContext = jsaccountsContext;
-      this.user = jsaccountsContext.user;
-      this.userId = jsaccountsContext.userId;
-    }
-
-    return method.apply(this, [...(args || [])]);
-  };
-};
-
-const wrapMeteorPublish = (Meteor, Accounts, ServerValidator) => {
-  const originalMeteorPublish = Meteor.publish;
-
-  Meteor.publish = (publicationName, func) => {
-    const newFunc = extendMethodWithFiber(func, ServerValidator, Meteor, Accounts, false);
-
-    return originalMeteorPublish.apply(Meteor, [publicationName, newFunc]);
-  };
-};
-
-const wrapMeteorMethods = (Meteor, Accounts, ServerValidator) => {
-  const originalMeteorMethod = Meteor.methods;
-
-  Meteor.methods = (methodsObject, ...args) => {
-    const modifiedArgs = Object.keys(methodsObject).map(methodName => {
-      const originalMethod = methodsObject[methodName];
-
-      return {
-        name: methodName,
-        method: extendMethodWithFiber(originalMethod, ServerValidator, Meteor, Accounts, true),
-      };
-    });
-
-    const argsAsObject = modifiedArgs.reduce((a, b) => Object.assign(a, {
-      [b.name]: b.method
-    }), {});
-
-    return originalMeteorMethod.apply(Meteor, [argsAsObject, ...(args || [])]);
-  }
-};
-
 export const wrapMeteorServer = (Meteor, Accounts, ServerValidator) => {
-  wrapMeteorMethods(Meteor, Accounts, ServerValidator);
-  wrapMeteorPublish(Meteor, Accounts, ServerValidator);
-
   Meteor.methods({
     'jsaccounts/validateLogout': function () {
       const connection = this.connection;
@@ -85,9 +10,26 @@ export const wrapMeteorServer = (Meteor, Accounts, ServerValidator) => {
 
       this.setUserId(null);
     },
-    'jsaccounts/validateLogin': function () {
+    'jsaccounts/validateLogin': function (accessToken) {
       const connection = this.connection;
-      const jsaccountsContext = Meteor.jsaccountsContext || {};
+      const meteorContext = this;
+
+      const method = Meteor.wrapAsync(function (accessToken, callback) {
+        ServerValidator.validateToken(accessToken, meteorContext)
+          .then(user => {
+            callback(null, user);
+          })
+          .catch(e => {
+            callback(e, null);
+          })
+      });
+
+      const user = method(accessToken);
+      const jsaccountsContext = {
+        userId: user ? user.id : null,
+        user: user || null,
+        accessToken,
+      };
 
       Meteor._noYieldsAllowed(function () {
         Accounts._removeTokenFromConnection(connection.id);

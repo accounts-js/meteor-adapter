@@ -1,15 +1,3 @@
-const wrapMeteorClientMethod = (Meteor, Accounts, AccountsClient, meteorMethod) => {
-  const originalCall = Meteor[meteorMethod];
-
-  Meteor[meteorMethod] = (name, ...args) => {
-    const {
-      accessToken
-    } = AccountsClient.tokens();
-
-    return originalCall.apply(Meteor, [name, accessToken || null, ...(args || [])]);
-  }
-};
-
 const replaceMethod = (source, dest, callbackify, argumentsTransformation, returnValueTransformation) => {
   argumentsTransformation = argumentsTransformation || (args => args);
   returnValueTransformation = returnValueTransformation || (retVal => retVal);
@@ -62,31 +50,19 @@ const replaceMethod = (source, dest, callbackify, argumentsTransformation, retur
   };
 };
 
-const wrapMeteorClientMethods = Meteor => {
-  const originalMeteorMethod = Meteor.methods;
-
-  Meteor.methods = (methodsObject, ...args) => {
-    const modifiedArgs = Object.keys(methodsObject).map(methodName => {
-      const originalMethod = methodsObject[methodName];
-
-      return {
-        name: methodName,
-        method: function(accessToken, ...args) {
-          return originalMethod.apply(this, args);
-        },
-      };
-    });
-
-    const argsAsObject = modifiedArgs.reduce((a, b) => Object.assign(a, {
-      [b.name]: b.method
-    }), {});
-
-    return originalMeteorMethod.apply(Meteor, [argsAsObject, ...(args || [])]);
+const clearMeteorOldTokens = Accounts => {
+  if (!localStorage) {
+    return;
   }
+
+  localStorage.removeItem(Accounts.LOGIN_TOKEN_KEY);
+  localStorage.removeItem(Accounts.LOGIN_TOKEN_EXPIRES_KEY);
+  localStorage.removeItem(Accounts.USER_ID_KEY);
 };
 
 export const wrapMeteorClient = (Meteor, Accounts, AccountsClient) => {
   Meteor.clearInterval(Accounts._pollIntervalTimer);
+  clearMeteorOldTokens(Accounts);
 
   replaceMethod({
       obj: Meteor,
@@ -114,8 +90,4 @@ export const wrapMeteorClient = (Meteor, Accounts, AccountsClient) => {
     false,
     null,
     (result) => result.accessToken || undefined);
-
-  wrapMeteorClientMethod(Meteor, Accounts, AccountsClient, 'call');
-  wrapMeteorClientMethod(Meteor, Accounts, AccountsClient, 'subscribe');
-  wrapMeteorClientMethods(Meteor);
 };
