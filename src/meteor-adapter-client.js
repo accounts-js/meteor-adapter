@@ -61,8 +61,10 @@ const clearMeteorOldTokens = Accounts => {
 };
 
 export const wrapMeteorClient = (Meteor, Accounts, AccountsClient) => {
-  Meteor.clearInterval(Accounts._pollIntervalTimer);
-  clearMeteorOldTokens(Accounts);
+  if (Accounts) {
+    Meteor.clearInterval(Accounts._pollIntervalTimer);
+    clearMeteorOldTokens(Accounts);
+  }
 
   replaceMethod({
       obj: Meteor,

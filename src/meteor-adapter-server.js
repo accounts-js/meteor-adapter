@@ -3,10 +3,12 @@ export const wrapMeteorServer = (Meteor, Accounts, ServerValidator) => {
     'jsaccounts/validateLogout': function () {
       const connection = this.connection;
 
-      Meteor._noYieldsAllowed(function () {
-        Accounts._removeTokenFromConnection(connection.id);
-        Accounts._setAccountData(connection.id, 'loginToken', null);
-      });
+      if (Accounts) {
+        Meteor._noYieldsAllowed(function () {
+          Accounts._removeTokenFromConnection(connection.id);
+          Accounts._setAccountData(connection.id, 'loginToken', null);
+        });
+      }
 
       this.setUserId(null);
     },
@@ -31,10 +33,12 @@ export const wrapMeteorServer = (Meteor, Accounts, ServerValidator) => {
         accessToken,
       };
 
-      Meteor._noYieldsAllowed(function () {
-        Accounts._removeTokenFromConnection(connection.id);
-        Accounts._setAccountData(connection.id, 'loginToken', jsaccountsContext.accessToken);
-      });
+      if (Accounts)  {
+        Meteor._noYieldsAllowed(function () {
+          Accounts._removeTokenFromConnection(connection.id);
+          Accounts._setAccountData(connection.id, 'loginToken', jsaccountsContext.accessToken);
+        });
+      }
 
       this.setUserId(jsaccountsContext.userId);
 
