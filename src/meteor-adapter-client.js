@@ -64,6 +64,17 @@ export const wrapMeteorClient = (Meteor, Accounts, AccountsClient) => {
   if (Accounts) {
     Meteor.clearInterval(Accounts._pollIntervalTimer);
     clearMeteorOldTokens(Accounts);
+
+    replaceMethod({
+        obj: Accounts,
+        method: '_storedLoginToken',
+      }, {
+        obj: AccountsClient,
+        method: 'tokens',
+      },
+      false,
+      null,
+      (result) => result.accessToken || undefined);
   }
 
   replaceMethod({
@@ -82,14 +93,4 @@ export const wrapMeteorClient = (Meteor, Accounts, AccountsClient) => {
     obj: AccountsClient,
     method: 'logout',
   });
-  replaceMethod({
-      obj: Accounts,
-      method: '_storedLoginToken',
-    }, {
-      obj: AccountsClient,
-      method: 'tokens',
-    },
-    false,
-    null,
-    (result) => result.accessToken || undefined);
 };
